@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billetera Pro - Fix Reporte</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { 
+            --bg: #f4f7f6; --teal: #00796b; --income: #4caf50; --expense: #f44336; --gold: #fbc02d; --purple: #9c27b0; --blue: #2196F3;
+        }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); padding-bottom: 110px; color: #333; }
+        
+        .nav { background: #fff; display: flex; justify-content: space-around; padding: 5px; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 10; overflow-x: auto; white-space: nowrap; }
+        .nav button { background: none; border: none; font-size: 0.65rem; font-weight: bold; color: #999; padding: 12px 10px; cursor: pointer; text-transform: uppercase; flex-shrink: 0; }
+        .nav button.active { color: var(--teal); border-bottom: 3px solid var(--teal); }
+        
+        .view { display: none; padding: 15px; animation: fadeIn 0.2s; }
+        .view.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .dashboard-container { background: white; border-radius: 25px; padding: 20px; margin-bottom: 20px; position: relative; min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .chart-box { position: relative; width: 150px; height: 150px; z-index: 2; }
+        .monefy-icon { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 3; width: 60px; text-align: center; transform: translate(-50%, -50%); }
+        .monefy-icon .emoji { font-size: 1.3rem; }
+        .monefy-icon .perc { font-size: 0.7rem; font-weight: bold; margin-top: 2px; }
+
+        .cat-group { background: white; border-radius: 18px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .cat-group-header { padding: 15px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+        .cat-group-content { display: none; background: #fafafa; border-top: 1px solid #eee; padding: 5px 0; }
+        .cat-group.open .cat-group-content { display: block; }
+        
+        .item { padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; gap: 10px; background: white; }
+        .item-info { display: flex; align-items: center; overflow: hidden; flex-grow: 1; }
+        .item-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+        .item-note { font-size: 0.75rem; color: #888; display: block; margin-top: 2px; }
+        
+        .amount-tag { white-space: nowrap; text-align: right; font-weight: bold; min-width: fit-content; flex-shrink: 0; }
+        .txt-expense { color: var(--expense) !important; }
+        .txt-income { color: var(--income) !important; }
+        .txt-invest { color: var(--blue) !important; }
+
+        .icon-circle { width: 40px; height: 40px; border-radius: 50%; background: #f0f4f3; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 12px; flex-shrink: 0; }
+        
+        .btn-hide { background: none; border: none; color: #ddd; cursor: pointer; font-size: 1rem; padding: 5px; margin-left: 8px; }
+
+        .pro-header { background: linear-gradient(45deg, #1a202c, #2d3748); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-radius: 15px; }
+        .pro-total { font-size: 1.2rem; font-weight: 800; }
+
+        .fabs { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; pointer-events: none; }
+        .btn { width: 65px; height: 65px; border-radius: 50%; border: none; color: white; font-size: 35px; box-shadow: 0 6px 15px rgba(0,0,0,0.2); pointer-events: auto; cursor: pointer; }
+        .minus { background: var(--expense); }
+        .plus { background: var(--income); }
+
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); align-items: center; justify-content: center; z-index: 100; }
+        .modal-body { background: white; width: 85%; padding: 25px; border-radius: 25px; max-height: 90vh; overflow-y: auto; }
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; }
+        .btn-save { background: var(--teal); color: white; border: none; padding: 15px; border-radius: 12px; width: 100%; font-weight: bold; cursor: pointer; margin-top: 10px; }
+
+        .crypto-card { background: #fff; padding: 15px; border-radius: 18px; margin-bottom: 15px; border-left: 5px solid #0033ad; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .profit-pos { color: var(--income); font-weight: bold; }
+        .profit-neg { color: var(--expense); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="nav">
+        <button id="btn-dash" class="active" onclick="showView('dash')">Billetera</button>
+        <button id="btn-finance" onclick="showView('finance')">Sueldo/Ahorro</button>
+        <button id="btn-report" onclick="showView('report')">Reporte Pagos</button>
+        <button id="btn-invest" onclick="showView('invest')">Inversiones</button>
+        <button id="btn-cobrar" onclick="showView('cobrar')">Cobros</button>
+        <button id="btn-config" onclick="showView('config')">Iconos</button>
+    </div>
+
+    <div id="view-dash" class="view active">
+        <div class="dashboard-container" id="monefy-board">
+            <div class="chart-box"><canvas id="myChart"></canvas></div>
+        </div>
+        <div id="total-balance" style="text-align: center; margin-bottom: 20px;"></div>
+        <div id="category-group-list"></div>
+    </div>
+
+    <div id="view-finance" class="view">
+        <div class="pro-header"><h3>Capital Neto</h3><div class="pro-total" id="fin-total-header">$0</div></div>
+        <div id="finance-income-list"></div>
+        <div id="finance-savings-list" style="margin-top: 15px;"></div>
+    </div>
+
+    <div id="view-report" class="view">
+        <h3 style="margin-bottom: 15px;">Sumatoria Mensual por Método</h3>
+        <div id="report-payments-list"></div>
+    </div>
+
+    <div id="view-invest" class="view">
+        <div class="pro-header" style="background: linear-gradient(45deg, #2b6cb0, #4299e1);"><h3>Portafolio</h3><div class="pro-total" id="inv-total-header">$0</div></div>
+        <div class="crypto-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div><strong>ADA (Cardano)</strong><br><small>Hold: 463.566213</small></div>
+                <div id="ada-price-live" style="font-weight:bold; color:#0033ad; font-size: 1.1rem;">$0.0000</div>
+            </div>
+            <div style="margin-top:10px; font-size:0.85rem; display:flex; justify-content:space-between;">
+                <span>Valor Actual: <strong id="ada-current-val-usd">$0</strong></span>
+                <span>P/L: <span id="ada-profit-loss">$0</span></span>
+            </div>
+        </div>
+        <div id="invest-list"></div>
+    </div>
+
+    <div id="view-cobrar" class="view"><h3 style="margin-bottom: 15px;">Cuentas por Cobrar</h3><div id="cobrar-list"></div></div>
+
+    <div id="view-config" class="view">
+        <h3>Gestionar Categorías</h3>
+        <div id="category-manager-list"></div>
+    </div>
+
+    <div class="fabs">
+        <button class="btn minus" onclick="openModal('expense')">−</button>
+        <button class="btn plus" onclick="openModal('income')">+</button>
+    </div>
+
+    <div id="modal">
+        <div class="modal-body">
+            <h3 id="modal-title">Registro</h3>
+            <input type="hidden" id="edit-id"><input type="date" id="date-input">
+            <div style="display: flex; gap: 10px;">
+                <select id="currency-select"><option value="UYU">UYU</option><option value="USD">USD</option></select>
+                <select id="payment-method-select"></select>
+            </div>
+            <select id="cat-select"></select>
+            <input type="number" id="amt" placeholder="Monto">
+            <input type="text" id="note" placeholder="Nota / Motivo">
+            <button class="btn-save" onclick="save()">Guardar</button>
+            <button id="btn-delete" style="display:none; color:red; border:none; background:none; width:100%; margin-top:10px;" onclick="deleteTransaction()">Eliminar</button>
+            <button onclick="closeModal()" style="width:100%; border:none; background:none; color:gray; margin-top:15px;">Cancelar</button>
+        </div>
+    </div>
+
+    <script>
+        let myChart = null;
+        let adaLivePrice = 0;
+        const ADA_HOLD = 463.566213;
+
+        let transactions = JSON.parse(localStorage.getItem('DB_FINAL')) || [];
+        let categories = JSON.parse(localStorage.getItem('CAT_FINAL')) || [
+            { id: '1', name: 'Comida', icon: '🛒', type: 'gasto', subcategories: ['Super', 'Restaurante'] },
+            { id: '2', name: 'Auto', icon: '🚗', type: 'gasto', subcategories: ['Cuota', 'Nafta'] },
+            { id: '3', name: 'Sueldo', icon: '💰', type: 'finanza', subcategories: [] }
+        ];
+        let paymentMethods = JSON.parse(localStorage.getItem('PAY_METHODS')) || ["Efectivo", "Visa Santander", "Oca Blue", "Prex", "Itaú", "Débito"];
+        const palette = ['#FF7043', '#26A69A', '#AB47BC', '#42A5F5', '#FFA726', '#78909C', '#EF5350', '#8D6E63', '#9CCC65'];
+
+        async function fetchAdaPrice() {
+            try {
+                const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=cardano&vs_currencies=usd');
+                const data = await res.json();
+                adaLivePrice = data.cardano.usd;
+                document.getElementById('ada-price-live').innerText = `$${adaLivePrice.toFixed(4)} USD`;
+                renderInvest();
+            } catch (e) { console.log("Error API"); }
+        }
+
+        function saveData() {
+            localStorage.setItem('DB_FINAL', JSON.stringify(transactions));
+            localStorage.setItem('CAT_FINAL', JSON.stringify(categories));
+            localStorage.setItem('PAY_METHODS', JSON.stringify(paymentMethods));
+        }
+
+        function formatValue(n, cur) { return cur === 'USD' ? `${n.toLocaleString()} $` : `${n.toLocaleString()} UYU`; }
+        function formatDateShort(s) { if(!s) return ""; const d = new Date(s + 'T12:00:00'); return `${d.getDate()}/${d.getMonth()+1}`; }
+
+        // --- DASHBOARD ---
+        function renderDash() {
+            const list = document.getElementById('category-group-list');
+            const board = document.getElementById('monefy-board');
+            if(!list || !board) return; list.innerHTML = '';
+            board.querySelectorAll('.monefy-icon').forEach(el => el.remove());
+            
+            let balUYU = 0, balUSD = 0, totalGastoUYU = 0;
+            const chartTotals = {}; const grouped = {};
+
+            transactions.forEach(t => {
+                const impact = (t.type === 'income' ? t.amount : -t.amount);
+                if(t.currency === 'USD') balUSD += impact; else balUYU += impact;
+                
+                const catObj = categories.find(c => c.icon === t.cat);
+                if(catObj && catObj.type === 'gasto') {
+                    const valUYU = (t.currency === 'USD' ? t.amount * 43 : t.amount);
+                    if(t.type === 'expense') {
+                        chartTotals[t.cat] = (chartTotals[t.cat] || 0) + valUYU;
+                        totalGastoUYU += valUYU;
+                    }
+                    if(!grouped[t.cat]) grouped[t.cat] = { uyu: 0, items: [] };
+                    grouped[t.cat].uyu += valUYU;
+                    grouped[t.cat].items.push(t);
+                }
+            });
+
+            const icons = Object.keys(chartTotals);
+            icons.forEach((icon, i) => {
+                const angle = (i * (360 / icons.length)) - 90;
+                const x = Math.cos(angle * Math.PI / 180) * 115;
+                const y = Math.sin(angle * Math.PI / 180) * 115;
+                const perc = totalGastoUYU > 0 ? Math.round((chartTotals[icon] / totalGastoUYU) * 100) : 0;
+                const div = document.createElement('div');
+                div.className = 'monefy-icon';
+                div.style.left = `calc(50% + ${x}px)`; div.style.top = `calc(50% + ${y}px)`;
+                div.innerHTML = `<span class="emoji">${icon}</span><span class="perc" style="color:${palette[i % palette.length]}">${perc}%</span>`;
+                board.appendChild(div);
+            });
+
+            categories.filter(c => c.type === 'gasto').forEach(cat => {
+                const data = grouped[cat.icon]; if(!data) return;
+                let itemsHtml = data.items.map(t => `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${cat.icon}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''} • ${formatDateShort(t.date)}</span></div></div><div class="amount-tag txt-expense">${formatValue(t.amount, t.currency)}</div></div>`).join('');
+                list.innerHTML += `<div class="cat-group" id="g-${cat.id}"><div class="cat-group-header" onclick="toggleGroup('g-${cat.id}')"><div>${cat.icon} <strong>${cat.name}</strong></div><div class="amount-tag txt-expense">${data.uyu.toLocaleString()} UYU</div></div><div class="cat-group-content">${itemsHtml}</div></div>`;
+            });
+
+            document.getElementById('total-balance').innerHTML = `<h2>${balUYU.toLocaleString()} UYU</h2><small>${balUSD.toLocaleString()} USD</small>`;
+            if(myChart) myChart.destroy();
+            myChart = new Chart(document.getElementById('myChart'), { type: 'doughnut', data: { labels: Object.keys(chartTotals), datasets: [{ data: Object.values(chartTotals), backgroundColor: palette, borderWidth: 0, cutout: '85%' }] }, options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } });
+        }
+
+        // --- REPORTE DE PAGOS (LÓGICA CORREGIDA SIN DUPLICADOS) ---
+        function renderReport() {
+            const list = document.getElementById('report-payments-list');
+            if(!list) return; list.innerHTML = '';
+            const now = new Date();
+            const totalsMetodo = {};
+            const itemsPorMetodo = {};
+
+            // Filtramos y agrupamos por ID único para evitar duplicación visual
+            transactions.forEach(t => {
+                const tDate = new Date(t.date + 'T12:00:00');
+                if(t.type === 'expense' && tDate.getMonth() === now.getMonth()) {
+                    const montoUYU = (t.currency === 'USD' ? t.amount * 43 : t.amount);
+                    if(!totalsMetodo[t.method]) totalsMetodo[t.method] = 0;
+                    if(!itemsPorMetodo[t.method]) itemsPorMetodo[t.method] = [];
+                    
+                    totalsMetodo[t.method] += montoUYU;
+                    itemsPorMetodo[t.method].push({...t, montoRealUYU: montoUYU});
+                }
+            });
+
+            Object.keys(totalsMetodo).sort((a,b) => totalsMetodo[b] - totalsMetodo[a]).forEach((metodo, idx) => {
+                const metId = `rep-total-${idx}`;
+                let itemsHtml = itemsPorMetodo[metodo].map(t => `
+                    <div class="item" id="rep-item-${t.id}">
+                        <div class="item-info" onclick="openEdit(${t.id})">
+                            <div class="icon-circle">${t.cat}</div>
+                            <div class="item-text"><strong>${t.sub}</strong><br><small>${t.note || ''}</small></div>
+                        </div>
+                        <div style="display:flex; align-items:center;">
+                            <div class="amount-tag txt-expense">${t.montoRealUYU.toLocaleString()} UYU</div>
+                            <button class="btn-hide" onclick="event.stopPropagation(); hideAndSubtract(${t.id}, ${t.montoRealUYU}, '${metId}')">✕</button>
+                        </div>
+                    </div>`).join('');
+
+                list.innerHTML += `<div class="cat-group" id="pg-${idx}"><div class="cat-group-header" onclick="toggleGroup('pg-${idx}')"><div><strong>${metodo}</strong></div><div class="amount-tag txt-expense" id="${metId}" data-val="${totalsMetodo[metodo]}">${totalsMetodo[metodo].toLocaleString()} UYU</div></div><div class="cat-group-content">${itemsHtml}</div></div>`;
+            });
+        }
+
+        function hideAndSubtract(id, monto, elId) {
+            const item = document.getElementById(`rep-item-${id}`);
+            const totalEl = document.getElementById(elId);
+            if(item && totalEl) {
+                item.style.display = 'none';
+                let current = parseFloat(totalEl.getAttribute('data-val'));
+                let nuevo = current - monto;
+                totalEl.setAttribute('data-val', nuevo);
+                totalEl.innerText = nuevo.toLocaleString() + " UYU";
+            }
+        }
+
+   <!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billetera Pro - Cloud Sync</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --bg: #f4f7f6; --teal: #00796b; --income: #4caf50; --expense: #f44336; --gold: #fbc02d; --purple: #9c27b0; --blue: #2196F3; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); padding-bottom: 110px; color: #333; }
+        .nav { background: #fff; display: flex; justify-content: space-around; padding: 5px; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 10; overflow-x: auto; white-space: nowrap; }
+        .nav button { background: none; border: none; font-size: 0.65rem; font-weight: bold; color: #999; padding: 12px 10px; cursor: pointer; text-transform: uppercase; flex-shrink: 0; }
+        .nav button.active { color: var(--teal); border-bottom: 3px solid var(--teal); }
+        .view { display: none; padding: 15px; animation: fadeIn 0.2s; }
+        .view.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .dashboard-container { background: white; border-radius: 25px; padding: 20px; margin-bottom: 20px; position: relative; min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .chart-box { position: relative; width: 150px; height: 150px; z-index: 2; }
+        .monefy-icon { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 3; width: 60px; text-align: center; transform: translate(-50%, -50%); }
+        .monefy-icon .emoji { font-size: 1.3rem; }
+        .monefy-icon .perc { font-size: 0.7rem; font-weight: bold; margin-top: 2px; }
+        .cat-group { background: white; border-radius: 18px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .cat-group-header { padding: 15px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+        .cat-group-content { display: none; background: #fafafa; border-top: 1px solid #eee; padding: 5px 0; }
+        .cat-group.open .cat-group-content { display: block; }
+        .item { padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; gap: 10px; background: white; }
+        .item-info { display: flex; align-items: center; overflow: hidden; flex-grow: 1; }
+        .item-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+        .item-note { font-size: 0.75rem; color: #888; display: block; margin-top: 2px; }
+        .amount-tag { white-space: nowrap; text-align: right; font-weight: bold; min-width: fit-content; flex-shrink: 0; }
+        .txt-expense { color: var(--expense) !important; }
+        .txt-income { color: var(--income) !important; }
+        .txt-invest { color: var(--blue) !important; }
+        .icon-circle { width: 40px; height: 40px; border-radius: 50%; background: #f0f4f3; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 12px; flex-shrink: 0; }
+        .pro-header { background: linear-gradient(45deg, #1a202c, #2d3748); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-radius: 15px; }
+        .pro-total { font-size: 1.2rem; font-weight: 800; }
+        .fabs { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; pointer-events: none; }
+        .btn { width: 65px; height: 65px; border-radius: 50%; border: none; color: white; font-size: 35px; box-shadow: 0 6px 15px rgba(0,0,0,0.2); pointer-events: auto; cursor: pointer; }
+        .minus { background: var(--expense); }
+        .plus { background: var(--income); }
+        .btn-hide { background: none; border: none; color: #ccc; font-size: 18px; margin-left: 10px; cursor: pointer; }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); align-items: center; justify-content: center; z-index: 100; }
+        .modal-body { background: white; width: 85%; padding: 25px; border-radius: 25px; max-height: 90vh; overflow-y: auto; }
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; }
+        .btn-save { background: var(--teal); color: white; border: none; padding: 15px; border-radius: 12px; width: 100%; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .crypto-card { background: #fff; padding: 15px; border-radius: 18px; margin-bottom: 15px; border-left: 5px solid #0033ad; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .profit-pos { color: var(--income); font-weight: bold; }
+        .profit-neg { color: var(--expense); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="nav">
+        <button id="btn-dash" class="active" onclick="showView('dash')">Billetera</button>
+        <button id="btn-finance" onclick="showView('finance')">Sueldo/Ahorro</button>
+        <button id="btn-report" onclick="showView('report')">Reporte Pagos</button>
+        <button id="btn-invest" onclick="showView('invest')">Inversiones</button>
+        <button id="btn-cobrar" onclick="showView('cobrar')">Cobros</button>
+        <button id="btn-config" onclick="showView('config')">Config/Nube</button>
+    </div>
+
+    <div id="view-dash" class="view active">
+        <div class="dashboard-container" id="monefy-board"><div class="chart-box"><canvas id="myChart"></canvas></div></div>
+        <div id="total-balance" style="text-align: center; margin-bottom: 20px;"></div>
+        <div id="category-group-list"></div>
+    </div>
+
+    <div id="view-finance" class="view">
+        <div class="pro-header"><h3>Capital Neto</h3><div class="pro-total" id="fin-total-header">$0</div></div>
+        <div id="finance-income-list"></div>
+        <div id="finance-savings-list" style="margin-top: 15px;"></div>
+    </div>
+
+    <div id="view-report" class="view">
+        <h3 style="margin-bottom: 15px;">Sumatoria Mensual por Método</h3>
+        <div id="report-payments-list"></div>
+    </div>
+
+    <div id="view-invest" class="view">
+        <div class="pro-header" style="background: linear-gradient(45deg, #2b6cb0, #4299e1);"><h3>Portafolio</h3><div class="pro-total" id="inv-total-header">$0</div></div>
+        <div class="crypto-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div><strong>ADA (Cardano)</strong><br><small>Hold: 463.566213</small></div>
+                <div id="ada-price-live" style="font-weight:bold; color:#0033ad; font-size: 1.1rem;">$0.0000</div>
+            </div>
+            <div style="margin-top:10px; font-size:0.85rem; display:flex; justify-content:space-between;">
+                <span>Valor Actual: <strong id="ada-current-val-usd">$0</strong></span>
+                <span>P/L: <span id="ada-profit-loss">$0</span></span>
+            </div>
+        </div>
+        <div id="invest-list"></div>
+    </div>
+
+    <div id="view-cobrar" class="view"><h3 style="margin-bottom: 15px;">Cuentas por Cobrar</h3><div id="cobrar-list"></div></div>
+
+    <div id="view-config" class="view">
+        <div class="pro-header"><h3>Nube Google Sheets</h3></div>
+        <div style="padding: 10px; background: white; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            <button class="btn-save" style="background: var(--teal);" onclick="loadFromCloud()">📥 Cargar desde Excel</button>
+            <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
+            <button class="btn-save" style="background: var(--blue);" onclick="backupToCloud()">📤 Enviar TODO al Excel</button>
+            <div id="cloud-status" style="margin-top: 12px; font-size: 0.8rem; color: #666; text-align: center;"></div>
+        </div>
+    </div>
+
+    <div class="fabs">
+        <button class="btn minus" onclick="openModal('expense')">−</button>
+        <button class="btn plus" onclick="openModal('income')">+</button>
+    </div>
+
+    <div id="modal">
+        <div class="modal-body">
+            <h3 id="modal-title">Registro</h3>
+            <input type="hidden" id="edit-id"><input type="date" id="date-input">
+            <div style="display: flex; gap: 10px;">
+                <select id="currency-select"><option value="UYU">UYU</option><option value="USD">USD</option></select>
+                <select id="payment-method-select"></select>
+            </div>
+            <select id="cat-select"></select>
+            <input type="number" id="amt" placeholder="Monto">
+            <input type="text" id="note" placeholder="Nota / Motivo">
+            <button class="btn-save" onclick="save()">Guardar</button>
+            <button id="btn-delete" style="display:none; color:red; border:none; background:none; width:100%; margin-top:10px;" onclick="deleteTransaction()">Eliminar</button>
+            <button onclick="closeModal()" style="width:100%; border:none; background:none; color:gray; margin-top:15px;">Cancelar</button>
+        </div>
+    </div>
+
+    <script>
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwZ_H8Q3OPIGZvkt2RwaKtosXhgfOubfDl2guEzMUnW3ZnsuQcIF7X-Yzo-3nLlJ_PXRA/exec"; 
+        
+        let myChart = null;
+        let adaLivePrice = 0;
+        const ADA_HOLD = 463.566213;
+
+        let transactions = JSON.parse(localStorage.getItem('DB_FINAL')) || [];
+        let categories = JSON.parse(localStorage.getItem('CAT_FINAL')) || [
+            { id: '1', name: 'Comida', icon: '🛒', type: 'gasto', subcategories: ['Super', 'Restaurante'] },
+            { id: '2', name: 'Auto', icon: '🚗', type: 'gasto', subcategories: ['Cuota', 'Nafta', 'Seguro'] },
+            { id: '3', name: 'Sueldo', icon: '💰', type: 'finanza', subcategories: ['Cobro', 'Extra'] },
+            { id: '4', name: 'Hogar', icon: '🏠', type: 'gasto', subcategories: ['Alquiler', 'Luz', 'Agua', 'Internet'] },
+            { id: '5', name: 'Inversión', icon: '📈', type: 'inversion', subcategories: ['ADA', 'Acciones'] },
+            { id: '6', name: 'A cobrar', icon: '⏳', type: 'cobrar', subcategories: ['Préstamo'] },
+            { id: '7', name: 'Banco', icon: '🏦', type: 'finanza', subcategories: ['Ahorro'] }
+        ];
+        let paymentMethods = JSON.parse(localStorage.getItem('PAY_METHODS')) || ["Efectivo", "Visa Santander", "Oca Blue", "Prex", "Itaú", "Débito"];
+        const palette = ['#FF7043', '#26A69A', '#AB47BC', '#42A5F5', '#FFA726', '#78909C', '#EF5350', '#8D6E63', '#9CCC65'];
+
+        async function backupToCloud() {
+            try {
+                const formData = new FormData();
+                formData.append('data', JSON.stringify(transactions));
+                await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: formData });
+                alert("Datos enviados.");
+            } catch(e) { alert("Error"); }
+        }
+
+        async function loadFromCloud() {
+            try {
+                const res = await fetch(SCRIPT_URL);
+                const data = await res.json();
+                if(data && Array.isArray(data)) {
+                    transactions = data.map(t => {
+                        // REPARACIÓN DE FECHAS: Intentamos limpiar el formato que viene de Excel
+                        let rawDate = t.fecha || t.date || "";
+                        let cleanDate = new Date().toISOString().split('T')[0]; // Por defecto hoy
+
+                        if (rawDate) {
+                            try {
+                                // Si viene como objeto de fecha o string largo, extraemos solo YYYY-MM-DD
+                                let d = new Date(rawDate);
+                                if (!isNaN(d.getTime())) {
+                                    cleanDate = d.toISOString().split('T')[0];
+                                }
+                            } catch(e) { console.log("Error procesando fecha individual"); }
+                        }
+
+                        return {
+                            id: t.id ? parseInt(t.id) : Date.now() + Math.random(),
+                            date: cleanDate,
+                            currency: t.moneda || t.currency || "UYU",
+                            method: t.método || t.method || "Efectivo",
+                            cat: t.categoría || t.cat || "🛒",
+                            sub: t.subcategoría || t.sub || "Varios",
+                            amount: parseFloat(t.monto || t.amount || 0),
+                            note: t.nota || t.note || "",
+                            type: t.tipo || t.type || "expense"
+                        };
+                    });
+                    saveData(); refreshAll();
+                    alert("Carga completa con reparación de fechas.");
+                }
+            } catch(e) { alert("Error al cargar."); }
+        }
+
+        function renderReport() {
+            const list = document.getElementById('report-payments-list'); 
+            if(!list) return; list.innerHTML = '';
+            
+            const now = new Date();
+            const curM = now.getMonth(), curY = now.getFullYear();
+            const totalsMetodo = {}, itemsPorMetodo = {};
+            let hayDatos = false;
+
+            transactions.forEach(t => {
+                const tDate = new Date(t.date + 'T12:00:00');
+                if(t.type === 'expense' && tDate.getMonth() === curM && tDate.getFullYear() === curY) {
+                    hayDatos = true;
+                    const mUYU = (t.currency === 'USD' ? t.amount * 43 : t.amount);
+                    if(!totalsMetodo[t.method]) { totalsMetodo[t.method] = 0; itemsPorMetodo[t.method] = []; }
+                    totalsMetodo[t.method] += mUYU; itemsPorMetodo[t.method].push({...t, mUYU});
+                }
+            });
+
+            if(!hayDatos) {
+                list.innerHTML = `<p style="text-align:center; color:#888; margin-top:20px;">No hay gastos este mes (${curM+1}/${curY})</p>`;
+                return;
+            }
+
+            Object.keys(totalsMetodo).sort((a,b) => totalsMetodo[b] - totalsMetodo[a]).forEach((m, idx) => {
+                const metId = `rep-total-${idx}`;
+                let items = itemsPorMetodo[m].map(t => `<div class="item" id="rep-item-${t.id}"><div class="item-info" onclick="openEdit(${t.id})"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><br><small>${t.note || ''}</small></div></div><div style="display:flex; align-items:center;"><div class="amount-tag txt-expense">${t.mUYU.toLocaleString()} UYU</div><button class="btn-hide" onclick="event.stopPropagation(); hideAndSubtract(${t.id}, ${t.mUYU}, '${metId}')">✕</button></div></div>`).join('');
+                list.innerHTML += `<div class="cat-group" id="pg-${idx}"><div class="cat-group-header" onclick="toggleGroup('pg-${idx}')"><div><strong>${m}</strong></div><div class="amount-tag txt-expense" id="${metId}" data-val="${totalsMetodo[m]}">${totalsMetodo[m].toLocaleString()} UYU</div></div><div class="cat-group-content">${items}</div></div>`;
+            });
+        }
+
+        async function fetchAdaPrice() {
+            try {
+                const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=cardano&vs_currencies=usd');
+                const data = await res.json();
+                adaLivePrice = data.cardano.usd;
+                document.getElementById('ada-price-live').innerText = `$${adaLivePrice.toFixed(4)} USD`;
+                renderInvest();
+            } catch (e) { console.log("Error API"); }
+        }
+
+        function saveData() { localStorage.setItem('DB_FINAL', JSON.stringify(transactions)); }
+        function formatValue(n, cur) { return cur === 'USD' ? `${n.toLocaleString()} $` : `${n.toLocaleString()} UYU`; }
+        function formatDateShort(s) { if(!s) return ""; const d = new Date(s + 'T12:00:00'); return `${d.getDate()}/${d.getMonth()+1}`; }
+
+        function renderDash() {
+            const list = document.getElementById('category-group-list'), board = document.getElementById('monefy-board');
+            if(!list || !board) return; list.innerHTML = ''; board.querySelectorAll('.monefy-icon').forEach(el => el.remove());
+            let balUYU = 0, balUSD = 0, totalGastoUYU = 0; const chartTotals = {}, grouped = {};
+            transactions.forEach(t => {
+                const impact = (t.type === 'income' ? t.amount : -t.amount);
+                if(t.currency === 'USD') balUSD += impact; else balUYU += impact;
+                const catObj = categories.find(c => c.icon === t.cat);
+                if(catObj && catObj.type === 'gasto') {
+                    const valUYU = (t.currency === 'USD' ? t.amount * 43 : t.amount);
+                    if(t.type === 'expense') { chartTotals[t.cat] = (chartTotals[t.cat] || 0) + valUYU; totalGastoUYU += valUYU; }
+                    if(!grouped[t.cat]) grouped[t.cat] = { uyu: 0, items: [] };
+                    grouped[t.cat].uyu += valUYU; grouped[t.cat].items.push(t);
+                }
+            });
+            Object.keys(chartTotals).forEach((icon, i) => {
+                const angle = (i * (360 / Object.keys(chartTotals).length)) - 90;
+                const x = Math.cos(angle * Math.PI / 180) * 115, y = Math.sin(angle * Math.PI / 180) * 115;
+                const perc = totalGastoUYU > 0 ? Math.round((chartTotals[icon] / totalGastoUYU) * 100) : 0;
+                const div = document.createElement('div'); div.className = 'monefy-icon';
+                div.style.left = `calc(50% + ${x}px)`; div.style.top = `calc(50% + ${y}px)`;
+                div.innerHTML = `<span class="emoji">${icon}</span><span class="perc" style="color:${palette[i % palette.length]}">${perc}%</span>`;
+                board.appendChild(div);
+            });
+            categories.filter(c => c.type === 'gasto').forEach(cat => {
+                const data = grouped[cat.icon]; if(!data) return;
+                let itemsHtml = data.items.map(t => `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${cat.icon}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''} • ${formatDateShort(t.date)}</span></div></div><div class="amount-tag txt-expense">${formatValue(t.amount, t.currency)}</div></div>`).join('');
+                list.innerHTML += `<div class="cat-group" id="g-${cat.id}"><div class="cat-group-header" onclick="toggleGroup('g-${cat.id}')"><div>${cat.icon} <strong>${cat.name}</strong></div><div class="amount-tag txt-expense">${data.uyu.toLocaleString()} UYU</div></div><div class="cat-group-content">${itemsHtml}</div></div>`;
+            });
+            document.getElementById('total-balance').innerHTML = `<h2>${balUYU.toLocaleString()} UYU</h2><small>${balUSD.toLocaleString()} USD</small>`;
+            if(myChart) myChart.destroy();
+            myChart = new Chart(document.getElementById('myChart'), { type: 'doughnut', data: { labels: Object.keys(chartTotals), datasets: [{ data: Object.values(chartTotals), backgroundColor: palette, borderWidth: 0, cutout: '85%' }] }, options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } });
+        }
+
+        function hideAndSubtract(id, monto, elId) { const item = document.getElementById(`rep-item-${id}`); const totalEl = document.getElementById(elId); if(item && totalEl) { item.style.display = 'none'; let current = parseFloat(totalEl.getAttribute('data-val')); let nuevo = current - monto; totalEl.setAttribute('data-val', nuevo); totalEl.innerText = nuevo.toLocaleString() + " UYU"; } }
+
+        function save() {
+            const eid = document.getElementById('edit-id').value, amt = parseFloat(document.getElementById('amt').value), catVal = document.getElementById('cat-select').value.split('|');
+            if(!amt) return;
+            const catObj = categories.find(c => c.icon === catVal[0]);
+            const transObj = { id: eid ? parseInt(eid) : Date.now(), amount: amt, currency: document.getElementById('currency-select').value, date: document.getElementById('date-input').value, cat: catVal[0], sub: catVal[1], note: document.getElementById('note').value, method: document.getElementById('payment-method-select').value, type: (catObj && (catObj.type === 'gasto' || catObj.type === 'inversion' || catObj.type === 'cobrar')) ? 'expense' : 'income' };
+            if(eid) { const idx = transactions.findIndex(t => t.id == eid); transactions[idx] = transObj; } else transactions.push(transObj);
+            saveData(); closeModal(); refreshAll();
+        }
+
+        function deleteTransaction() { if(confirm("¿Eliminar?")) { const eid = document.getElementById('edit-id').value; transactions = transactions.filter(t => t.id != eid); saveData(); closeModal(); refreshAll(); } }
+        function refreshAll() { renderDash(); renderInvest(); renderFinance(); renderReport(); renderCobrar(); }
+        function showView(v) { document.querySelectorAll('.view').forEach(x => x.classList.remove('active')); document.querySelectorAll('.nav button').forEach(x => x.classList.remove('active')); document.getElementById('view-'+v).classList.add('active'); document.getElementById('btn-'+v).classList.add('active'); if(v === 'invest') fetchAdaPrice(); refreshAll(); }
+        function toggleGroup(id) { document.getElementById(id).classList.toggle('open'); }
+        
+        function renderFinance() { 
+            const incList = document.getElementById('finance-income-list'), savList = document.getElementById('finance-savings-list'); 
+            if(!incList || !savList) return; incList.innerHTML = ''; savList.innerHTML = ''; let total = 0; 
+            transactions.forEach(t => { 
+                const c = categories.find(cat => cat.icon === t.cat); 
+                if (c && c.type === 'finanza') { 
+                    total += (t.currency === 'USD' ? t.amount * 43 : t.amount); 
+                    const h = `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''}</span></div></div><div class="amount-tag txt-income">${formatValue(t.amount, t.currency)}</div></div>`; 
+                    if(t.sub.toLowerCase().includes('ahorro') || t.cat === '🏦') savList.innerHTML += h; else incList.innerHTML += h; 
+                } 
+            }); 
+            document.getElementById('fin-total-header').innerText = total.toLocaleString() + " UYU"; 
+        }
+        
+        function renderInvest() {
+            const list = document.getElementById('invest-list'); if(!list) return; list.innerHTML = '';
+            let totalUYU = 0, investUSD = 0;
+            transactions.forEach(t => {
+                const c = categories.find(cat => cat.icon === t.cat);
+                if(c && c.type === 'inversion') {
+                    const mUYU = (t.currency === 'USD' ? t.amount * 43 : t.amount);
+                    totalUYU += mUYU;
+                    if(t.sub.toUpperCase().includes('ADA') || (t.note && t.note.toUpperCase().includes('ADA'))) { investUSD += (t.currency === 'USD' ? t.amount : t.amount / 43); }
+                    list.innerHTML += `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''}</span></div></div><div class="amount-tag txt-invest">${formatValue(t.amount, t.currency)}</div></div>`;
+                }
+            });
+            const actualUSD = ADA_HOLD * adaLivePrice, pl = actualUSD - investUSD;
+            document.getElementById('ada-current-val-usd').innerText = `$${actualUSD.toFixed(2)}`;
+            const plEl = document.getElementById('ada-profit-loss'); plEl.innerText = `$${pl.toFixed(2)} (${investUSD > 0 ? ((pl/investUSD)*100).toFixed(1) : 0}%)`;
+            plEl.className = pl >= 0 ? 'profit-pos' : 'profit-neg';
+            document.getElementById('inv-total-header').innerText = totalUYU.toLocaleString() + " UYU";
+        }
+
+        function renderCobrar() { const list = document.getElementById('cobrar-list'); if(!list) return; list.innerHTML = ''; transactions.filter(t => { const c = categories.find(cat => cat.icon === t.cat); return c && c.type === 'cobrar'; }).forEach(t => { list.innerHTML += `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''}</span></div></div><div class="amount-tag txt-expense">${formatValue(t.amount, t.currency)}</div></div>`; }); }
+
+        function openModal(type) {
+            document.getElementById('modal').style.display = 'flex'; document.getElementById('edit-id').value = ""; document.getElementById('amt').value = "";
+            document.getElementById('date-input').value = new Date().toISOString().split('T')[0];
+            const pSel = document.getElementById('payment-method-select'); pSel.innerHTML = '';
+            paymentMethods.forEach(m => pSel.innerHTML += `<option value="${m}">${m}</option>`);
+            const cSel = document.getElementById('cat-select'); cSel.innerHTML = '';
+            categories.filter(c => type === 'income' ? c.type === 'finanza' : (c.type === 'gasto' || c.type === 'inversion' || c.type === 'cobrar')).forEach(c => {
+                if(c.subcategories && c.subcategories.length > 0) c.subcategories.forEach(s => cSel.innerHTML += `<option value="${c.icon}|${s}">${c.icon} ${c.name} > ${s}</option>`);
+                else cSel.innerHTML += `<option value="${c.icon}|${c.name}">${c.icon} ${c.name}</option>`;
+            });
+        }
+
+        function openEdit(id) {
+            const t = transactions.find(x => x.id === id); if(!t) return;
+            openModal(t.type === 'income' ? 'income' : 'expense');
+            document.getElementById('edit-id').value = id; document.getElementById('amt').value = t.amount;
+            document.getElementById('date-input').value = t.date; document.getElementById('note').value = t.note || "";
+            document.getElementById('payment-method-select').value = t.method;
+            document.getElementById('cat-select').value = `${t.cat}|${t.sub}`;
+            document.getElementById('btn-delete').style.display = 'block';
+        }
+
+        function closeModal() { document.getElementById('modal').style.display = 'none'; document.getElementById('btn-delete').style.display = 'none'; }
+        window.onload = () => { refreshAll(); fetchAdaPrice(); loadFromCloud(); setInterval(fetchAdaPrice, 60000); };
+    </script>
+</body>
+</html>
+
+        function deleteTransaction() {
+            if(confirm("¿Eliminar?")) {
+                const eid = document.getElementById('edit-id').value;
+                transactions = transactions.filter(t => t.id != eid);
+                saveData(); closeModal(); refreshAll();
+            }
+        }
+
+        function refreshAll() { renderDash(); renderInvest(); renderFinance(); renderReport(); renderCobrar(); renderConfig(); }
+        
+        function showView(v) { 
+            document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+            document.querySelectorAll('.nav button').forEach(x => x.classList.remove('active'));
+            document.getElementById('view-'+v).classList.add('active');
+            document.getElementById('btn-'+v).classList.add('active');
+            if(v === 'invest') fetchAdaPrice();
+            refreshAll();
+        }
+
+        function toggleGroup(id) { document.getElementById(id).classList.toggle('open'); }
+        
+        function renderFinance() { const incList = document.getElementById('finance-income-list'); const savList = document.getElementById('finance-savings-list'); if(!incList || !savList) return; incList.innerHTML = ''; savList.innerHTML = ''; let total = 0; transactions.forEach(t => { const c = categories.find(cat => cat.icon === t.cat); if (c && c.type === 'finanza') { total += (t.currency === 'USD' ? t.amount * 43 : t.amount); const h = `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''}</span></div></div><div class="amount-tag txt-income">${formatValue(t.amount, t.currency)}</div></div>`; if(t.sub.toLowerCase().includes('ahorro') || t.cat === '🏦') savList.innerHTML += h; else incList.innerHTML += h; } }); document.getElementById('fin-total-header').innerText = total.toLocaleString() + " UYU"; }
+        
+        function renderInvest() {
+            const list = document.getElementById('invest-list'); if(!list) return; list.innerHTML = '';
+            let totalUYU = 0; let investUSD = 0;
+            transactions.forEach(t => {
+                const c = categories.find(cat => cat.icon === t.cat);
+                if(c && c.type === 'inversion') {
+                    const montoUYU = (t.currency === 'USD' ? t.amount * 43 : t.amount);
+                    totalUYU += montoUYU;
+                    if(t.sub.toUpperCase().includes('ADA') || (t.note && t.note.toUpperCase().includes('ADA'))) {
+                        investUSD += (t.currency === 'USD' ? t.amount : t.amount / 43);
+                    }
+                    list.innerHTML += `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''}</span></div></div><div class="amount-tag txt-invest">${formatValue(t.amount, t.currency)}</div></div>`;
+                }
+            });
+            const actualUSD = ADA_HOLD * adaLivePrice;
+            const pl = actualUSD - investUSD;
+            document.getElementById('ada-current-val-usd').innerText = `$${actualUSD.toFixed(2)}`;
+            const plEl = document.getElementById('ada-profit-loss');
+            plEl.innerText = `$${pl.toFixed(2)} (${investUSD > 0 ? ((pl/investUSD)*100).toFixed(1) : 0}%)`;
+            plEl.className = pl >= 0 ? 'profit-pos' : 'profit-neg';
+            document.getElementById('inv-total-header').innerText = totalUYU.toLocaleString() + " UYU";
+        }
+
+        function renderCobrar() { const list = document.getElementById('cobrar-list'); if(!list) return; list.innerHTML = ''; transactions.filter(t => { const c = categories.find(cat => cat.icon === t.cat); return c && c.type === 'cobrar'; }).forEach(t => { list.innerHTML += `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''}</span></div></div><div class="amount-tag txt-expense">${formatValue(t.amount, t.currency)}</div></div>`; }); }
+        
+        function renderConfig() { const list = document.getElementById('category-manager-list'); if(!list) return; list.innerHTML = ''; categories.forEach(c => { list.innerHTML += `<div class="item"><div>${c.icon} ${c.name} (${c.type})</div></div>`; }); }
+
+        function openModal(type) {
+            document.getElementById('modal').style.display = 'flex';
+            document.getElementById('edit-id').value = ""; document.getElementById('amt').value = "";
+            document.getElementById('date-input').value = new Date().toISOString().split('T')[0];
+            const pSel = document.getElementById('payment-method-select'); pSel.innerHTML = '';
+            paymentMethods.forEach(m => pSel.innerHTML += `<option value="${m}">${m}</option>`);
+            const cSel = document.getElementById('cat-select'); cSel.innerHTML = '';
+            categories.filter(c => type === 'income' ? c.type === 'finanza' : (c.type === 'gasto' || c.type === 'inversion' || c.type === 'cobrar')).forEach(c => {
+                if(c.subcategories && c.subcategories.length > 0) c.subcategories.forEach(s => cSel.innerHTML += `<option value="${c.icon}|${s}">${c.icon} ${c.name} > ${s}</option>`);
+                else cSel.innerHTML += `<option value="${c.icon}|${c.name}">${c.icon} ${c.name}</option>`;
+            });
+        }
+
+        function openEdit(id) {
+            const t = transactions.find(x => x.id === id);
+            if(!t) return;
+            openModal(t.type === 'income' ? 'income' : 'expense');
+            document.getElementById('edit-id').value = id; 
+            document.getElementById('amt').value = t.amount;
+            document.getElementById('date-input').value = t.date; 
+            document.getElementById('note').value = t.note || "";
+            document.getElementById('payment-method-select').value = t.method;
+            document.getElementById('cat-select').value = `${t.cat}|${t.sub}`;
+            document.getElementById('btn-delete').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+            document.getElementById('btn-delete').style.display = 'none';
+        }
+
+        window.onload = () => { refreshAll(); fetchAdaPrice(); setInterval(fetchAdaPrice, 60000); };
+    </script>
+</body>
+</html>
