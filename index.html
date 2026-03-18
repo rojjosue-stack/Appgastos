@@ -42,7 +42,6 @@
 
         .icon-circle { width: 40px; height: 40px; border-radius: 50%; background: #f0f4f3; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 12px; flex-shrink: 0; }
         
-        .btn-hide { background: none; border: none; color: #ddd; cursor: pointer; font-size: 1rem; padding: 5px; margin-left: 8px; }
         .pro-header { background: linear-gradient(45deg, #1a202c, #2d3748); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-radius: 15px; }
         .pro-total { font-size: 1.2rem; font-weight: 800; }
 
@@ -79,25 +78,17 @@
     <div id="view-finance" class="view">
         <div class="pro-header"><h3>Capital Neto</h3><div class="pro-total" id="fin-total-header">$0</div></div>
         <div id="finance-income-list"></div>
-        <div id="finance-savings-list" style="margin-top: 15px;"></div>
     </div>
-
     <div id="view-report" class="view">
-        <h3 style="margin-bottom: 15px;">Sumatoria Mensual por Método</h3>
+        <h3 style="margin-bottom: 15px;">Sumatoria Mensual</h3>
         <div id="report-payments-list"></div>
     </div>
-
     <div id="view-invest" class="view">
         <div class="pro-header" style="background: linear-gradient(45deg, #2b6cb0, #4299e1);"><h3>Portafolio</h3><div class="pro-total" id="inv-total-header">$0</div></div>
         <div id="invest-list"></div>
     </div>
-
-    <div id="view-cobrar" class="view"><h3 style="margin-bottom: 15px;">Cuentas por Cobrar</h3><div id="cobrar-list"></div></div>
-
-    <div id="view-config" class="view">
-        <h3>Gestionar Categorías</h3>
-        <div id="category-manager-list"></div>
-    </div>
+    <div id="view-cobrar" class="view"><h3>Cuentas por Cobrar</h3><div id="cobrar-list"></div></div>
+    <div id="view-config" class="view"><h3>Gestionar Categorías</h3><div id="category-manager-list"></div></div>
 
     <div class="fabs">
         <button class="btn minus" onclick="openModal('expense')">−</button>
@@ -107,7 +98,8 @@
     <div id="modal">
         <div class="modal-body">
             <h3 id="modal-title">Registro</h3>
-            <input type="hidden" id="edit-id"><input type="date" id="date-input">
+            <input type="hidden" id="edit-id">
+            <input type="date" id="date-input">
             <div style="display: flex; gap: 10px;">
                 <select id="currency-select"><option value="UYU">UYU</option><option value="USD">USD</option></select>
                 <select id="payment-method-select"></select>
@@ -125,7 +117,6 @@
         let myChart = null;
         const palette = ['#FF7043', '#26A69A', '#AB47BC', '#42A5F5', '#FFA726', '#78909C', '#EF5350', '#8D6E63', '#9CCC65'];
 
-        // CARGA DE DATOS: Prioriza lo que ya existe en el navegador
         let transactions = JSON.parse(localStorage.getItem('DB_FINAL')) || [];
         let categories = JSON.parse(localStorage.getItem('CAT_FINAL')) || [
             { id: '1', name: 'Comida', icon: '🛒', type: 'gasto', subcategories: ['Super', 'Restaurante'] },
@@ -160,34 +151,28 @@
                 const impact = (t.type === 'income' ? monto : -monto);
                 if(t.currency === 'USD') balUSD += impact; else balUYU += impact;
                 
-                // Buscamos la categoría. Si no existe en la lista actual, creamos un objeto temporal para no perder el dato
                 let catObj = categories.find(c => c.icon === t.cat);
                 
-                // Solo procesamos como gasto para el Dashboard si el tipo de transacción es 'expense'
                 if(t.type === 'expense') {
                     const valUYU = (t.currency === 'USD' ? monto * 43 : monto);
+                    chartTotals[t.cat] = (chartTotals[t.cat] || 0) + valUYU;
+                    totalGastoUYU += valUYU;
                     
-                    // Si la categoría no existe o es de tipo gasto, la sumamos al dashboard
-                    if(!catObj || catObj.type === 'gasto') {
-                        chartTotals[t.cat] = (chartTotals[t.cat] || 0) + valUYU;
-                        totalGastoUYU += valUYU;
-                        
-                        if(!grouped[t.cat]) {
-                            grouped[t.cat] = { 
-                                name: catObj ? catObj.name : "Otros", 
-                                icon: t.cat, 
-                                id: catObj ? catObj.id : Date.now() + Math.random(), 
-                                uyu: 0, 
-                                items: [] 
-                            };
-                        }
-                        grouped[t.cat].uyu += valUYU;
-                        grouped[t.cat].items.push(t);
+                    if(!grouped[t.cat]) {
+                        // REPARACIÓN DE NOMBRE: Si catObj no existe, usa el icono o el nombre guardado en t.sub
+                        grouped[t.cat] = { 
+                            name: catObj ? catObj.name : (t.sub ? t.sub : "Categoría " + t.cat), 
+                            icon: t.cat, 
+                            id: catObj ? catObj.id : Math.random(), 
+                            uyu: 0, 
+                            items: [] 
+                        };
                     }
+                    grouped[t.cat].uyu += valUYU;
+                    grouped[t.cat].items.push(t);
                 }
             });
 
-            // Dibujar iconos del gráfico
             const icons = Object.keys(chartTotals);
             icons.forEach((icon, i) => {
                 const angle = (i * (360 / icons.length)) - 90;
@@ -201,7 +186,6 @@
                 board.appendChild(div);
             });
 
-            // Dibujar lista de grupos
             Object.values(grouped).forEach(group => {
                 let itemsHtml = group.items.map(t => `
                     <div class="item" onclick="openEdit(${t.id})">
@@ -223,7 +207,6 @@
             });
 
             document.getElementById('total-balance').innerHTML = `<h2>${balUYU.toLocaleString()} UYU</h2><small>${balUSD.toLocaleString()} USD</small>`;
-            
             if(myChart) myChart.destroy();
             const ctx = document.getElementById('myChart');
             if(ctx) {
@@ -238,7 +221,6 @@
             }
         }
 
-        // Resto de funciones (save, refreshAll, etc.)
         function refreshAll() { renderDash(); renderFinance(); renderReport(); renderInvest(); renderCobrar(); renderConfig(); }
         function showView(v) { 
             document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
@@ -318,12 +300,12 @@
             document.getElementById('btn-delete').style.display = 'none';
         }
 
-        // Funciones de renderizado simple para las otras pestañas
-        function renderFinance() { /* Lógica similar a la anterior */ }
-        function renderReport() { /* Lógica similar a la anterior */ }
-        function renderInvest() { /* Lógica similar a la anterior */ }
-        function renderCobrar() { /* Lógica similar a la anterior */ }
-        function renderConfig() { 
+        // Placeholders de renderizado
+        function renderFinance() {}
+        function renderReport() {}
+        function renderInvest() {}
+        function renderCobrar() {}
+        function renderConfig() {
             const list = document.getElementById('category-manager-list'); 
             if(!list) return; list.innerHTML = ''; 
             categories.forEach(c => { 
