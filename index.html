@@ -42,8 +42,6 @@
         .txt-invest { color: var(--blue) !important; }
 
         .icon-circle { width: 40px; height: 40px; border-radius: 50%; background: #f0f4f3; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 12px; flex-shrink: 0; }
-        
-        .btn-hide { background: none; border: none; color: #ddd; cursor: pointer; font-size: 1rem; padding: 5px; margin-left: 8px; }
 
         .pro-header { background: linear-gradient(45deg, #1a202c, #2d3748); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-radius: 15px; }
         .pro-total { font-size: 1.2rem; font-weight: 800; }
@@ -113,7 +111,6 @@
     </div>
 
     <div id="view-cobrar" class="view"><h3>Cuentas por Cobrar</h3><div id="cobrar-list"></div></div>
-
     <div id="view-config" class="view"><h3>Gestionar Categorías</h3><div id="category-manager-list"></div></div>
 
     <div class="fabs">
@@ -164,9 +161,11 @@
                 const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=cardano&vs_currencies=usd');
                 const data = await res.json();
                 adaLivePrice = data.cardano.usd;
-                document.getElementById('ada-price-live').innerText = `$${adaLivePrice.toFixed(4)} USD`;
+                if(document.getElementById('ada-price-live')) {
+                    document.getElementById('ada-price-live').innerText = `$${adaLivePrice.toFixed(4)} USD`;
+                }
                 renderInvest();
-            } catch (e) { console.log("Error API"); }
+            } catch (e) { console.log("Error API Cardano"); }
         }
 
         async function loadFromCloud() {
@@ -184,9 +183,9 @@
                     saveData();
                     status.innerText = "✅ Datos de la nube cargados";
                 } else {
-                    status.innerText = "⚠️ Nube vacía, usando local";
+                    status.innerText = "⚠️ Nube vacía";
                 }
-            } catch (e) { status.innerText = "⚠️ Error Nube / Modo Local"; }
+            } catch (e) { status.innerText = "⚠️ Error de conexión"; }
             refreshAll();
         }
 
@@ -197,19 +196,19 @@
                     mode: 'no-cors',
                     body: JSON.stringify(obj)
                 });
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error("Error sincronizando", e); }
         }
 
         async function exportDataToSheets() {
             if (!transactions.length) return alert("Sin datos.");
-            if (!confirm(`¿Exportar ${transactions.length} registros?`)) return;
+            if (!confirm(`¿Sincronizar ${transactions.length} registros con la nube?`)) return;
             const status = document.getElementById('sync-status');
-            status.innerText = "🚀 Exportando...";
+            status.innerText = "🚀 Enviando...";
             for (let i = 0; i < transactions.length; i++) {
                 await syncToCloud(transactions[i]);
-                status.innerText = `🚀 Enviando: ${i+1}/${transactions.length}`;
+                status.innerText = `🚀 ${i+1}/${transactions.length}`;
             }
-            status.innerText = "✅ Exportación lista";
+            status.innerText = "✅ Sincronizado";
         }
 
         function saveData() {
@@ -235,11 +234,12 @@
                 if(t.currency === 'USD') balUSD += impact; else balUYU += impact;
 
                 const catObj = categories.find(c => c.icon === t.cat);
-                if(catObj && (t.type === 'expense' || catObj.type === 'gasto')) {
+                // Si es un gasto o pertenece a una categoría de tipo gasto
+                if(t.type === 'expense' || (catObj && catObj.type === 'gasto')) {
                     const valUYU = (t.currency === 'USD' ? t.amount * 43 : t.amount);
-                    if(catObj.type === 'gasto'){
-                        chartTotals[t.cat] = (chartTotals[t.cat] || 0) + valUYU;
-                        totalGastoUYU += valUYU;
+                    if(!catObj || catObj.type === 'gasto') {
+                         chartTotals[t.cat] = (chartTotals[t.cat] || 0) + valUYU;
+                         totalGastoUYU += valUYU;
                     }
                     if(!grouped[t.cat]) grouped[t.cat] = { uyu: 0, items: [] };
                     grouped[t.cat].uyu += valUYU;
@@ -302,44 +302,43 @@
                 }
             });
             Object.keys(totalsMetodo).sort((a,b) => totalsMetodo[b] - totalsMetodo[a]).forEach((metodo, idx) => {
-                const metId = `rep-total-${idx}`;
-                let itemsHtml = itemsPorMetodo[metodo].map(t => `<div class="item" id="rep-item-${t.id}"><div class="item-info" onclick="openEdit(${t.id})"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><br><small>${t.note || ''}</small></div></div><div class="amount-tag txt-expense">${t.montoRealUYU.toLocaleString()} UYU</div></div>`).join('');
-                list.innerHTML += `<div class="cat-group" id="pg-${idx}"><div class="cat-group-header" onclick="toggleGroup('pg-${idx}')"><div><strong>${metodo}</strong></div><div class="amount-tag txt-expense" id="${metId}">${totalsMetodo[metodo].toLocaleString()} UYU</div></div><div class="cat-group-content">${itemsHtml}</div></div>`;
+                let itemsHtml = itemsPorMetodo[metodo].map(t => `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><br><small>${t.note || ''}</small></div></div><div class="amount-tag txt-expense">${t.montoRealUYU.toLocaleString()} UYU</div></div>`).join('');
+                list.innerHTML += `<div class="cat-group" id="pg-${idx}"><div class="cat-group-header" onclick="toggleGroup('pg-${idx}')"><div><strong>${metodo}</strong></div><div class="amount-tag txt-expense">${totalsMetodo[metodo].toLocaleString()} UYU</div></div><div class="cat-group-content">${itemsHtml}</div></div>`;
             });
         }
 
         function renderInvest() {
             const list = document.getElementById('invest-list');
             if(!list) return; list.innerHTML = '';
-            let totalUYU = 0; let investUSD = 0;
+            let totalUYU = 0, investUSD = 0;
             transactions.forEach(t => {
                 const c = categories.find(cat => cat.icon === t.cat);
                 if(c && c.type === 'inversion') {
                     const montoUYU = (t.currency === 'USD' ? t.amount * 43 : t.amount);
                     totalUYU += montoUYU;
-                    if(t.sub.toUpperCase().includes('ADA') || (t.note && t.note.toUpperCase().includes('ADA'))) {
-                        investUSD += (t.currency === 'USD' ? t.amount : t.amount / 43);
-                    }
+                    if(t.sub.toUpperCase().includes('ADA')) investUSD += (t.currency === 'USD' ? t.amount : t.amount / 43);
                     list.innerHTML += `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''}</span></div></div><div class="amount-tag txt-invest">${formatValue(t.amount, t.currency)}</div></div>`;
                 }
             });
-            const actualUSD = ADA_HOLD * adaLivePrice;
-            const pl = actualUSD - investUSD;
-            document.getElementById('ada-current-val-usd').innerText = `$${actualUSD.toFixed(2)}`;
-            const plEl = document.getElementById('ada-profit-loss');
-            plEl.innerText = `$${pl.toFixed(2)} (${investUSD > 0 ? ((pl/investUSD)*100).toFixed(1) : 0}%)`;
-            plEl.className = pl >= 0 ? 'profit-pos' : 'profit-neg';
-            document.getElementById('inv-total-header').innerText = totalUYU.toLocaleString() + " UYU";
+            if(document.getElementById('ada-current-val-usd')){
+                const actualUSD = ADA_HOLD * adaLivePrice;
+                const pl = actualUSD - investUSD;
+                document.getElementById('ada-current-val-usd').innerText = `$${actualUSD.toFixed(2)}`;
+                const plEl = document.getElementById('ada-profit-loss');
+                plEl.innerText = `$${pl.toFixed(2)} (${investUSD > 0 ? ((pl/investUSD)*100).toFixed(1) : 0}%)`;
+                plEl.className = pl >= 0 ? 'profit-pos' : 'profit-neg';
+                document.getElementById('inv-total-header').innerText = totalUYU.toLocaleString() + " UYU";
+            }
         }
 
         function renderCobrar() { 
             const list = document.getElementById('cobrar-list');
             if(!list) return; list.innerHTML = ''; 
-            transactions.filter(t => { 
+            transactions.forEach(t => { 
                 const c = categories.find(cat => cat.icon === t.cat); 
-                return c && c.type === 'cobrar'; 
-            }).forEach(t => { 
-                list.innerHTML += `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''}</span></div></div><div class="amount-tag txt-expense">${formatValue(t.amount, t.currency)}</div></div>`; 
+                if(c && c.type === 'cobrar') {
+                    list.innerHTML += `<div class="item" onclick="openEdit(${t.id})"><div class="item-info"><div class="icon-circle">${t.cat}</div><div class="item-text"><strong>${t.sub}</strong><span class="item-note">${t.note || ''}</span></div></div><div class="amount-tag txt-expense">${formatValue(t.amount, t.currency)}</div></div>`; 
+                }
             });
         }
 
@@ -347,11 +346,12 @@
             const list = document.getElementById('category-manager-list');
             if(!list) return; list.innerHTML = ''; 
             categories.forEach(c => { 
-                list.innerHTML += `<div class="item"><div>${c.icon} ${c.name} (${c.type})</div></div>`; 
+                list.innerHTML += `<div class="item"><div>${c.icon} ${c.name} <small>(${c.type})</small></div></div>`; 
             });
         }
 
         function refreshAll() { renderDash(); renderInvest(); renderFinance(); renderReport(); renderCobrar(); renderConfig(); }
+        
         function showView(v) { 
             document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
             document.querySelectorAll('.nav button').forEach(x => x.classList.remove('active'));
@@ -360,6 +360,7 @@
             if(v === 'invest') fetchAdaPrice();
             refreshAll();
         }
+
         function toggleGroup(id) { document.getElementById(id).classList.toggle('open'); }
 
         function save() {
@@ -374,7 +375,7 @@
                 date: document.getElementById('date-input').value,
                 cat: catVal[0], sub: catVal[1], note: document.getElementById('note').value,
                 method: document.getElementById('payment-method-select').value,
-                type: (catObj && (catObj.type === 'gasto' || catObj.type === 'inversion' || catObj.type === 'cobrar')) ? 'expense' : 'income'
+                type: (catObj && (catObj.type === 'finanza')) ? 'income' : 'expense'
             };
             if(eid) { const idx = transactions.findIndex(t => t.id == eid); transactions[idx] = transObj; }
             else transactions.push(transObj);
@@ -384,7 +385,7 @@
         }
 
         function deleteTransaction() {
-            if(confirm("¿Eliminar?")) {
+            if(confirm("¿Eliminar registro?")) {
                 const eid = document.getElementById('edit-id').value;
                 transactions = transactions.filter(t => t.id != eid);
                 saveData(); closeModal(); refreshAll();
@@ -399,7 +400,7 @@
             paymentMethods.forEach(m => pSel.innerHTML += `<option value="${m}">${m}</option>`);
             const cSel = document.getElementById('cat-select'); cSel.innerHTML = '';
             categories.filter(c => type === 'income' ? c.type === 'finanza' : (c.type === 'gasto' || c.type === 'inversion' || c.type === 'cobrar')).forEach(c => {
-                if(c.subcategories && c.subcategories.length > 0) c.subcategories.forEach(s => cSel.innerHTML += `<option value="${c.icon}|${s}">${c.icon} ${c.name} > ${s}</option>`);
+                if(c.subcategories.length > 0) c.subcategories.forEach(s => cSel.innerHTML += `<option value="${c.icon}|${s}">${c.icon} ${c.name} > ${s}</option>`);
                 else cSel.innerHTML += `<option value="${c.icon}|${c.name}">${c.icon} ${c.name}</option>`;
             });
         }
@@ -417,10 +418,7 @@
             document.getElementById('btn-delete').style.display = 'block';
         }
 
-        function closeModal() {
-            document.getElementById('modal').style.display = 'none';
-            document.getElementById('btn-delete').style.display = 'none';
-        }
+        function closeModal() { document.getElementById('modal').style.display = 'none'; document.getElementById('btn-delete').style.display = 'none'; }
 
         window.onload = async () => { 
             await loadFromCloud();
